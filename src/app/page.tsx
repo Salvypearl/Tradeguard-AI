@@ -14,9 +14,18 @@ BarChart3,
 type Decision = "WAITING" | "APPROVE" | "WARN" | "BLOCK";
 
 export default function Home() {
+  const [assetType, setAssetType] = useState<"STOCK" | "OPTION">("STOCK");
+
 const [symbol, setSymbol] = useState("");
 const [direction, setDirection] = useState("");
 const [entryPrice, setEntryPrice] = useState("");
+const [optionType, setOptionType] = useState<"CALL" | "PUT">("CALL");
+const [optionAction, setOptionAction] = useState<"BUY" | "SELL">("BUY");
+
+const [strikePrice, setStrikePrice] = useState("");
+const [expiration, setExpiration] = useState("");
+const [premium, setPremium] = useState("");
+const [contracts, setContracts] = useState("");
 const [stopLoss, setStopLoss] = useState("");
 const [takeProfit, setTakeProfit] = useState("");
 const [positionSize, setPositionSize] = useState("");
@@ -37,37 +46,135 @@ function analyzeTrade() {
   const entry = Number(entryPrice);
   const stop = Number(stopLoss);
   const target = Number(takeProfit);
+
+  if (assetType === "OPTION" && (!target || target <= 0)) {
+  setDecision("BLOCK");
+  setMessage("Please enter a valid option take profit.");
+  return;
+}
   const size = Number(positionSize);
+
+  const strike = Number(strikePrice);
+  const optionPremium = Number(premium);
+  const optionContracts = Number(contracts);
 
   const normalizedDirection = direction.trim().toUpperCase();
 
-if (
-  !symbol.trim() ||
-  !normalizedDirection ||
-  !entry ||
-  !stop ||
-  !target ||
-  !size
-) {
-  setDecision("BLOCK");
-  setMessage("Please complete all trade fields before analyzing.");
-  return;
+if (assetType === "STOCK") {
+  if (
+    !symbol.trim() ||
+    !normalizedDirection ||
+    !entry ||
+    !stop ||
+    !target ||
+    !size
+  ) {
+    setDecision("BLOCK");
+    setMessage("Please complete all stock trade fields before analyzing.");
+    return;
+  }
 }
 
-if (!["LONG", "SHORT"].includes(normalizedDirection)) {
-  setDecision("BLOCK");
-  setMessage("Direction must be LONG or SHORT.");
-  return;
+if (assetType === "OPTION") {
+  if (
+    !symbol.trim() ||
+    !strike ||
+    !optionPremium ||
+    !optionContracts
+  ) {
+    setDecision("BLOCK");
+    setMessage("Please complete all option trade fields before analyzing.");
+    return;
+  }
 }
 
-if (size <= 0) {
-  setDecision("BLOCK");
-  setMessage("Position size must be greater than zero.");
-  return;
+if (assetType === "STOCK") {
+  if (!["LONG", "SHORT"].includes(normalizedDirection)) {
+    setDecision("BLOCK");
+    setMessage("Direction must be LONG or SHORT.");
+    return;
+  }
+
+  if (size <= 0) {
+    setDecision("BLOCK");
+    setMessage("Position size must be greater than zero.");
+    return;
+  }
 }
 
 let riskPerShare = 0;
 let profitPerShare = 0;
+
+if (assetType === "OPTION") {
+  if (!optionPremium || !optionContracts) {
+    setDecision("BLOCK");
+    setMessage("Please enter the option premium and number of contracts.");
+    return;
+  }
+
+  if (!strike || strike <= 0) {
+    setDecision("BLOCK");
+    setMessage("Please enter a valid strike price.");
+    return;
+  }
+
+  if (optionPremium <= 0) {
+    setDecision("BLOCK");
+    setMessage("Option premium must be greater than zero.");
+    return;
+  }
+
+  const optionPositionSize = optionContracts * 100;
+    const optionStopLoss = Number(stopLoss);
+      const optionTakeProfit = Number(takeProfit);
+
+    if (!optionStopLoss || optionStopLoss <= 0) {
+      setDecision("BLOCK");
+      setMessage("Please enter a valid option stop loss.");
+      return;
+    }
+  const optionRisk = (optionPremium - optionStopLoss) * optionPositionSize;
+
+   const optionMaxProfit =
+    optionAction === "BUY"
+      ? Math.max(0, (optionTakeProfit - optionPremium) * optionPositionSize)
+      : Math.max(0, (optionPremium - target) * optionPositionSize);
+
+  const optionRR =
+    optionRisk > 0 ? optionMaxProfit / optionRisk : 0;
+
+  setRisk(optionRisk);
+  setProfit(optionMaxProfit);
+  setRiskReward(optionRR);
+
+if (optionRisk > maxRisk) {
+  setDecision("BLOCK");
+  setMessage(
+    `Maximum allowed risk is $${maxRisk.toFixed(
+      2
+    )}. This option position risks $${optionRisk.toFixed(2)}.`
+  );
+  return;
+}
+
+if (optionRR < 2) {
+  setDecision("WARN");
+  setMessage(
+    `Option risk/reward is ${optionRR.toFixed(
+      2
+    )}:1. TradeGuard recommends at least 2:1.`
+  );
+  return;
+}
+
+setDecision("APPROVE");
+setMessage(
+  `Option trade passes the initial TradeGuard risk checks. Maximum premium exposure is $${optionRisk.toFixed(
+    2
+  )}.`
+);
+return;
+}
 
 if (normalizedDirection === "LONG") {
   if (stop >= entry) {
@@ -109,6 +216,7 @@ const rr = totalRisk > 0 ? totalProfit / totalRisk : 0;
 
 setRisk(totalRisk);
 setProfit(totalProfit);
+  setRiskReward(rr);
 if (totalRisk > maxRisk) {
   setDecision("BLOCK");
   setMessage(
@@ -202,6 +310,23 @@ return (
         <div className="mb-6">
           <h2 className="text-xl font-semibold">Analyze a Trade</h2>
 
+          <div>
+  <label className="mb-2 block text-sm text-slate-300">
+    Asset Type
+  </label>
+
+  <select
+    value={assetType}
+    onChange={(e) =>
+      setAssetType(e.target.value as "STOCK" | "OPTION")
+    }
+    className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none focus:border-cyan-400"
+  >
+    <option value="STOCK">Stock</option>
+    <option value="OPTION">Option</option>
+  </select>
+</div>
+
           <p className="mt-1 text-sm text-slate-400">
             TradeGuard checks the trade before it reaches the broker.
           </p>
@@ -209,27 +334,107 @@ return (
 
         <div className="grid gap-5 md:grid-cols-2">
           <Input
-            label="Symbol"
+            label="Ticker"
             placeholder="QQQ"
             value={symbol}
             onChange={setSymbol}
           />
 
-          <Input
-            label="Direction"
-            placeholder="LONG"
-            value={direction}
-            onChange={setDirection}
-          />
+          {assetType === "STOCK" ? (
+ <div>
+  <label className="mb-2 block text-sm text-slate-300">
+    Direction
+  </label>
 
-          <Input
-            label="Entry Price"
-            placeholder="500.00"
-            type="number"
-            value={entryPrice}
-            onChange={setEntryPrice}
-          />
+  <select
+    value={direction}
+    onChange={(e) => setDirection(e.target.value)}
+    className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none focus:border-cyan-400"
+  >
+    <option value="">Select direction</option>
+    <option value="LONG">Long</option>
+    <option value="SHORT">Short</option>
+  </select>
+</div>
+) : (
+  <>
+   <div>
+  <label className="mb-2 block text-sm text-slate-300">
+    Option Type
+  </label>
 
+  <select
+    value={optionType}
+    onChange={(e) =>
+      setOptionType(e.target.value as "CALL" | "PUT")
+    }
+    className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none focus:border-cyan-400"
+  >
+    <option value="CALL">Call</option>
+    <option value="PUT">Put</option>
+  </select>
+</div>
+
+  <div>
+  <label className="mb-2 block text-sm text-slate-300">
+    Action
+  </label>
+
+  <select
+    value={optionAction}
+    onChange={(e) =>
+      setOptionAction(e.target.value as "BUY" | "SELL")
+    }
+    className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none focus:border-cyan-400"
+  >
+    <option value="BUY">Buy</option>
+    <option value="SELL">Sell</option>
+  </select>
+</div>
+    <Input
+  label="Strike Price"
+  placeholder="500.00"
+  type="number"
+  value={strikePrice}
+  onChange={setStrikePrice}
+/>
+
+<Input
+  label="Expiration"
+  placeholder="YYYY-MM-DD"
+  type="date"
+  value={expiration}
+  onChange={setExpiration}
+/>
+
+<Input
+  label="Premium"
+  placeholder="5.00"
+  type="number"
+  value={premium}
+  onChange={setPremium}
+/>
+
+<Input
+  label="Contracts"
+  placeholder="1"
+  type="number"
+  value={contracts}
+  onChange={setContracts}
+ />
+ 
+  </>
+)}
+
+            {assetType === "STOCK" && (
+              <Input
+                label="Entry Price"
+                placeholder="500.00"
+                type="number"
+                value={entryPrice}
+                onChange={setEntryPrice}
+              />
+            )}
           <Input
             label="Stop Loss"
             placeholder="495.00"
@@ -246,13 +451,15 @@ return (
             onChange={setTakeProfit}
           />
 
-          <Input
-            label="Position Size"
-            placeholder="10"
-            type="number"
-            value={positionSize}
-            onChange={setPositionSize}
-          />
+            {assetType === "STOCK" && (
+              <Input
+                label="Position Size (Shares)"
+                placeholder="10"
+                type="number"
+                value={positionSize}
+                onChange={setPositionSize}
+              />
+            )}
         </div>
 
         {/* RISK PREVIEW */}
