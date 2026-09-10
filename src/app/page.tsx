@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
 ShieldCheck,
 TrendingUp,
@@ -15,6 +15,20 @@ type Decision = "WAITING" | "APPROVE" | "WARN" | "BLOCK";
 
 export default function Home() {
   const [assetType, setAssetType] = useState<"STOCK" | "OPTION">("STOCK");
+
+   useEffect(() => {
+  fetch("/api/alpaca/account")
+    .then((res) => res.json())
+    .then((data) => setAccount(data))
+    .catch((error) => console.error("Alpaca account error:", error));
+
+  fetch("/api/alpaca/positions")
+    .then((res) => res.json())
+    .then((data) => setPositionCount(data.length))
+    .catch((error) =>
+      console.error("Alpaca positions error:", error)
+    );
+}, []);
 
 const [symbol, setSymbol] = useState("");
 const [direction, setDirection] = useState("");
@@ -38,6 +52,12 @@ const [message, setMessage] = useState(
 const [risk, setRisk] = useState(0);
 const [profit, setProfit] = useState(0);
 const [riskReward, setRiskReward] = useState(0);
+const [account, setAccount] = useState<{
+  cash: string;
+  effective_buying_power: string;
+  portfolio_value: string;
+} | null>(null);
+const [positionCount, setPositionCount] = useState(0);
 
 const accountBalance = 100000;
 const maxRisk = accountBalance * 0.01;
@@ -278,21 +298,21 @@ return (
       <StatCard
         icon={<Wallet size={20} />}
         title="Paper Cash"
-        value="$100,000"
+        value={account ? `$${Number(account.cash).toLocaleString()}` : "Loading..."}
         subtitle="Simulated balance"
       />
 
       <StatCard
         icon={<TrendingUp size={20} />}
         title="Buying Power"
-        value="$200,000"
+        value={account ? `$${Number(account.effective_buying_power).toLocaleString()}` : "Loading..."}
         subtitle="Available"
       />
 
       <StatCard
         icon={<Activity size={20} />}
         title="Open Positions"
-        value="0"
+        value={positionCount.toString()}
         subtitle="Currently held"
       />
 
